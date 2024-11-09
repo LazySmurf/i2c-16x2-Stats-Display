@@ -51,8 +51,22 @@ or
 ```bash
 python Raspberry_Pi_1602_LCD_Stats.py
 ```
+---
+
+It might also be worth renaming the file to something simpler to type and/or remember:
+```bash
+mv Raspberry_Pi_1602_LCD_Stats.py stats.py
+```
+and then running it:
+```bash
+./stats.py
+```
+or
+```bash
+python stats.py
+```
 ## Acknowledgements
 
- - [M Heidenreich](https://github.com/mheidenreich/LCDDemo/blob/main/lcd-hello.py)
- - [Reegz](https://stackoverflow.com/a/71019862)
- - [maciek97x and Karl Knechtel](https://stackoverflow.com/a/75722775)
+ - [M Heidenreich](https://github.com/mheidenreich/LCDDemo/blob/main/lcd-hello.py) - Display setup and original Hello World script
+ - [Reegz](https://stackoverflow.com/a/71019862) - Providing information on the use of psutil
+ - [maciek97x and Karl Knechtel](https://stackoverflow.com/a/75722775) - explaining the use of Python virtual environments and the ```--break-system-packages``` argument in pip
