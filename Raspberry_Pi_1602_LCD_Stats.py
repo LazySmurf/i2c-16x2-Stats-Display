@@ -74,27 +74,17 @@ def getDisk():
     diskstring = str(useddisk) + " / " + str(totaldisk) + " GB"
     return diskstring
 
-def wait_until_sync():
-    """Wait until the system clock seconds end in 0 or 5"""
-    while True:
-        current_second = datetime.now().second
-        if current_second % 5 == 0:
-            break
-        # Sleep a short amount to avoid busy waiting
-        time.sleep(0.1)
-
-def wait_until_unsync():
-    """Wait until the system clock seconds no longer end in 0 or 5"""
-    while True:
-        current_second = datetime.now().second
-        if current_second % 5 != 0:
-            break
-        # Sleep a short amount to avoid busy waiting
-        time.sleep(0.1)
-
 def safe_exit(signum, frame):
     exit(1)
 
+def fiveSecSync():
+    while True:
+        current_second = datetime.now().second
+        if current_second % 5 == 0:
+            time.sleep(1.5)
+            break
+        else:
+            time.sleep(0.1)
 #Main program loop
 try:
     signal(SIGTERM, safe_exit)
@@ -103,30 +93,30 @@ try:
     count = 1 # Sometimes Python doesn't like while(true) so instead we do it this way
     while (count > 0):
 
-        wait_until_sync()
-
         #Show IP Addresses
         lcd.text(getIntIP(), 1)
         lcd.text(getExtIP(), 2)
 
-        wait_until_unsync()
+        fiveSecSync()
 
         #Show CPU Info
         lcd.text("CPU Use:  " + getCPU(), 1)
         lcd.text("CPU Temp: " + getTemp() + chr(223) + "C", 2) #chr(223) is the degrees symbol
 
-        wait_until_unsync()
+        fiveSecSync()
 
         #Show RAM info
         lcd.text("Memory Usage", 1)
         lcd.text(getRAM(), 2)
 
-        wait_until_unsync()
+        fiveSecSync()
 
+        #Show Disk info
         lcd.text("Disk Usage", 1)
         lcd.text(getDisk(), 2)
 
-        wait_until_unsync()
+        fiveSecSync()
+
     pause()
 
 except KeyboardInterrupt:
