@@ -83,6 +83,15 @@ def wait_until_sync():
         # Sleep a short amount to avoid busy waiting
         time.sleep(0.1)
 
+def wait_until_unsync():
+    """Wait until the system clock seconds no longer end in 0 or 5"""
+    while True:
+        current_second = datetime.now().second
+        if current_second % 5 != 0:
+            break
+        # Sleep a short amount to avoid busy waiting
+        time.sleep(0.1)
+
 def safe_exit(signum, frame):
     exit(1)
 
@@ -100,24 +109,24 @@ try:
         lcd.text(getIntIP(), 1)
         lcd.text(getExtIP(), 2)
 
-        wait_until_sync()
+        wait_until_unsync()
 
         #Show CPU Info
         lcd.text("CPU Use:  " + getCPU(), 1)
         lcd.text("CPU Temp: " + getTemp() + chr(223) + "C", 2) #chr(223) is the degrees symbol
 
-        wait_until_sync()
+        wait_until_unsync()
 
         #Show RAM info
         lcd.text("Memory Usage", 1)
         lcd.text(getRAM(), 2)
 
-        wait_until_sync()
+        wait_until_unsync()
 
         lcd.text("Disk Usage", 1)
         lcd.text(getDisk(), 2)
 
-        wait_until_sync()
+        wait_until_unsync()
     pause()
 
 except KeyboardInterrupt:
