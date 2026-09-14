@@ -1,8 +1,9 @@
 #!/usr/bin/python3
-print("\nStarting 1602 stats script...\n")
+
+print("\nStarting 16x2 stats script...\n")
 
 """
-16x2 i2c LCD Stats Script
+16x2 I2C LCD Stats Script
 Written by LazySmurf Development
 Based on: https://github.com/mheidenreich/LCDDemo/blob/main/lcd-hello.py
 
@@ -10,10 +11,15 @@ Dependencies:
 pip install rpi_lcd
 pip install psutil
 pip install gpiozero
+
+Display synchronization:
+Each page is assigned to an absolute 5-second time slot.
+This means multiple Pis will display the same page at the same
+time, regardless of when their individual scripts were started.
 """
 
-#Import necessary libraries
-from signal import signal, SIGTERM, SIGHUP, pause
+# Import necessary libraries
+from signal import signal, SIGTERM, SIGHUP
 from rpi_lcd import LCD
 from gpiozero import CPUTemperature
 import socket
@@ -23,110 +29,190 @@ import time
 import psutil
 from datetime import datetime
 
-#Create instance of the LCD to manipulate
+# Create instance of the LCD to manipulate
 lcd = LCD()
 
-#Update the display to know it's working before the rest of the script runs
-#Mostly useful on very slow computers
-lcd.text("Stats script", 1)
-lcd.text("started running", 2)
+# Update the display to know it's working before the rest of the script runs
+# Mostly useful on very slow computers
+lcd.text("     Welcome to", 1)
+lcd.text("      Lightning", 2)
 
-#Get INTERNAL IP
+# ------------------------------------------------------------
+# SYSTEM INFORMATION
+# ------------------------------------------------------------
+# Get INTERNAL IP
 def getIntIP():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 80))
-    local = s.getsockname()[0]
-    s.close()
+
+    try:
+        s.connect(("8.8.8.8", 80))
+        local = s.getsockname()[0]
+    finally:
+        s.close()
+
     return local
-print("Int IP: " + getIntIP())
 
-#Get EXTERNAL IP
+# Get EXTERNAL IP
 def getExtIP():
-    rawip = os.popen("curl -s icanhazip.com").read() # Grab IP from icanhazip.com
-    matchip = re.search("^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$", rawip) # remove any characters that aren't the IP (sometimes a newline character at the end)
-    ip = matchip.group(0) # select the match
-    return ip
-print("Ext IP: " + getExtIP())
+    rawip = os.popen("curl -s icanhazip.com").read()
+    matchip = re.search(
+        "^[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$",
+        rawip.strip()
+    )
 
-#Get CPU Info
+    if matchip:
+        return matchip.group(0)
+
+    return "???.???.???.???"
+
+# Get CPU Info
 def getCPU():
     cpu = str(psutil.cpu_percent()) + '%'
     return cpu
+
+# Get CPU Temperature
 def getTemp():
     temp = str(round(float(CPUTemperature().temperature), 1))
     return temp
 
-#Get RAM Info
+# Get RAM Info
 def getRAM():
     memory = psutil.virtual_memory()
-    #bytes -> kilobytes -> megabytes
-    usedmem = int(round((memory.total - memory.free)/1024.0/1024.0, 1))
-    totalmem = int(round(memory.total/1024.0/1024.0, 1))
+    # bytes -> kilobytes -> megabytes
+    usedmem = int(round((memory.total - memory.free) / 1024.0 / 1024.0, 1))
+    totalmem = int(round(memory.total / 1024.0 / 1024.0, 1))
     memstring = str(usedmem) + " / " + str(totalmem) + " MB"
     return memstring
 
-#Get Disk Info
+# Get Disk Info
 def getDisk():
     disk = psutil.disk_usage('/')
-    #bytes -> kilobytes -> megabytes -> gigabytes
-    useddisk = round((disk.total - disk.free)/1024.0/1024.0/1024.0, 1)
-    totaldisk = round(disk.total/1024.0/1024.0/1024.0, 1)
+    # bytes -> kilobytes -> megabytes -> gigabytes
+    useddisk = round((disk.total - disk.free) / 1024.0 / 1024.0 / 1024.0, 1)
+    totaldisk = round(disk.total / 1024.0 / 1024.0 / 1024.0, 1)
     diskstring = str(useddisk) + " / " + str(totaldisk) + " GB"
     return diskstring
 
+# ------------------------------------------------------------
+# SIGNAL HANDLING
+# ------------------------------------------------------------
+# Gracefully exit when systemd stops the service
 def safe_exit(signum, frame):
-    exit(1)
+    raise SystemExit
 
-def fiveSecSync():
-    while True:
-        current_second = datetime.now().second
-        if current_second % 5 == 0:
-            time.sleep(1.5)
-            break
-        else:
-            time.sleep(0.1)
-#Main program loop
+# ------------------------------------------------------------
+# DISPLAY SYNCHRONIZATION
+# ------------------------------------------------------------
+# Number of pages
+PAGE_COUNT = 6
+# How long each page is displayed, in seconds
+PAGE_DURATION = 5
+
+def get_current_page():
+    """Calculate which page should currently be displayed."""
+    time_slot = int(time.time() // PAGE_DURATION)
+    return time_slot % PAGE_COUNT
+
+def get_next_page_time():
+    """Return the Unix timestamp at which the next page begins."""
+    current_time = time.time()
+    next_slot = (int(current_time // PAGE_DURATION) + 1) * PAGE_DURATION
+    return next_slot
+
+# ------------------------------------------------------------
+# DISPLAY PAGES
+# ------------------------------------------------------------
+def display_page(page):
+    """Display the requested page on the LCD."""
+
+    if page == 0:
+        # Hostname
+        lcd.text("Hostname:", 1)
+        lcd.text(socket.gethostname(), 2)
+
+    elif page == 1:
+        # IP Addresses
+        lcd.text(getIntIP(), 1)
+        lcd.text(getExtIP(), 2)
+
+    elif page == 2:
+        # Date and Time
+        lcd.text(datetime.now().strftime("%b %d, %Y"), 1)
+        lcd.text(datetime.now().strftime("%I:%M:%S %p"), 2)
+
+    elif page == 3:
+        # CPU Info
+        lcd.text("CPU Use:  " + getCPU(), 1)
+        lcd.text("CPU Temp: " + getTemp() + chr(223) + "C", 2)
+
+    elif page == 4:
+        # RAM Info
+        lcd.text("Memory Usage", 1)
+        lcd.text(getRAM(), 2)
+
+    elif page == 5:
+        # Disk Info
+        lcd.text("Disk Usage", 1)
+        lcd.text(getDisk(), 2)
+
+# ------------------------------------------------------------
+# DATE/TIME PAGE
+# ------------------------------------------------------------
+def update_datetime_page():
+    """Update the date/time display."""
+    lcd.text(datetime.now().strftime("%b %d, %Y"), 1)
+    lcd.text(datetime.now().strftime("%I:%M:%S %p"), 2)
+
+# ------------------------------------------------------------
+# MAIN PROGRAM LOOP
+# ------------------------------------------------------------
 try:
     signal(SIGTERM, safe_exit)
     signal(SIGHUP, safe_exit)
 
-    count = 1 # Sometimes Python doesn't like while(true) so instead we do it this way
-    while (count > 0):
+    last_page = None
 
-        #Show IP Addresses
-        lcd.text(getIntIP(), 1)
-        lcd.text(getExtIP(), 2)
+    while True:
+        current_page = get_current_page()
 
-        fiveSecSync()
+        # ----------------------------------------------------
+        # DATE/TIME PAGE
+        # ----------------------------------------------------
+        if current_page == 2:
+            print("Displaying page 2 at " + datetime.now().strftime("%H:%M:%S"))
 
-        #Show CPU Info
-        lcd.text("CPU Use:  " + getCPU(), 1)
-        lcd.text("CPU Temp: " + getTemp() + chr(223) + "C", 2) #chr(223) is the degrees symbol
+            # Update the date/time once per second while
+            # this page is active.
+            while get_current_page() == 2:
+                update_datetime_page()
+                time.sleep(1)
 
-        fiveSecSync()
+            # Page has changed. Return to the main loop.
+            last_page = None
+            continue
 
-        #Show RAM info
-        lcd.text("Memory Usage", 1)
-        lcd.text(getRAM(), 2)
+        # ----------------------------------------------------
+        # NORMAL PAGES
+        # ----------------------------------------------------
+        if current_page != last_page:
+            print("Displaying page " + str(current_page) + " at " + datetime.now().strftime("%H:%M:%S"))
+            display_page(current_page)
+            last_page = current_page
 
-        fiveSecSync()
+        # Calculate how long until the next 5-second boundary.
+        next_page = get_next_page_time()
+        sleep_time = next_page - time.time()
 
-        #Show Disk info
-        lcd.text("Disk Usage", 1)
-        lcd.text(getDisk(), 2)
+        # Protect against extremely small/negative values.
+        if sleep_time < 0.05:
+            sleep_time = 0.05
 
-        fiveSecSync()
-
-    pause()
+        time.sleep(sleep_time)
 
 except KeyboardInterrupt:
     pass
 
 finally:
-    lcd.text("Stats script", 1)
-    lcd.text("stopped running", 2)
-    # Instead of having an error message when the script stops,
-    # you can instead clear the screen. In this case, it is more
-    # helpful to know the script stopped running since it is headless.
-    #lcd.clear()
-    print("\nClosing 1602 stats script!\n")
+    lcd.text("Connection to", 1)
+    lcd.text("screen lost :(", 2)
+    print("\nClosing 16x2 stats script!\n")
